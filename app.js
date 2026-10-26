@@ -198,29 +198,79 @@ function alerte(msg) {
 }
 
 // ---------- Ajout de segments ----------
-function ajouterTexte(texte, type = "parole") {
+// orateur et point : ceux en cours quand la phrase a commencé (par défaut, ceux de maintenant)
+function ajouterTexte(texte, type = "parole", orateur = etat.orateur, point = etat.pointIndex) {
   texte = texte.trim();
   if (!texte) return;
   const p = points();
   const der = etat.segments[etat.segments.length - 1];
   const maintenant = Date.now();
-  if (type === "parole" && der && der.type === "parole" && der.orateur === etat.orateur &&
-      der.point === etat.pointIndex && maintenant - der.tsFin < FUSION_MS) {
+  if (type === "parole" && der && der.type === "parole" && der.orateur === orateur &&
+      der.point === point && maintenant - der.tsFin < FUSION_MS) {
     der.texte += (/[.!?…]$/.test(der.texte) ? " " : ". ") + texte;
     der.tsFin = maintenant;
   } else {
     etat.segments.push({
       id: crypto.randomUUID(), type, ts: maintenant, tsFin: maintenant,
-      point: etat.pointIndex, pointTitre: p[etat.pointIndex] || "",
-      orateur: type === "parole" ? etat.orateur : (type === "note" ? "Note" : "Vote"), texte,
+      point, pointTitre: p[point] || "",
+      orateur: type === "parole" ? orateur : (type === "note" ? "Note" : "Vote"), texte,
     });
   }
   rendreFluxSiLibre();
   sauver();
 }
 
+// ---------- Micro ----------
+const CLE_MICRO = "etoiles-roi-ag/micro";
+async function listerMicros() {
+  const sel = $("micro");
+  let choix = sel.value;
+  try { choix = choix || localStorage.getItem(CLE_MICRO) || ""; } catch (e) { /* rien */ }
+  let appareils = [];
+  try { appareils = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput"); } catch (e) { /* rien */ }
+  sel.textContent = "";
+  sel.append(new Option("Micro par défaut de Windows", ""));
+  for (const d of appareils) {
+    if (d.deviceId === "default" || d.deviceId === "communications") continue;
+    sel.append(new Option(d.label || "Micro " + (sel.options.length), d.deviceId));
+  }
+  sel.value = [...sel.options].some((o) => o.value === choix) ? choix : "";
+}
+async function ouvrirMicro() {
+  const id = $("micro").value;
+  fluxAudio = await navigator.mediaDevices.getUserMedia({
+    audio: { deviceId: id ? { exact: id } : undefined, echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+  });
+  const piste = fluxAudio.getAudioTracks()[0];
+  piste.onended = () => { if (ecoute) { alerte("Le micro s'est déconnecté. Rebranchez-le puis reprenez l'écoute."); arreterEcoute(); } };
+  listerMicros();
+}
+function fermerMicro() {
+  fluxAudio?.getTracks().forEach((t) => t.stop());
+  fluxAudio = null;
+}
+
 // ---------- Reconnaissance vocale ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let phrase = null; // qui parlait, et sur quel point, quand la phrase en cours a commencé
+// Le service de Google ferme sa session au bout de 5 minutes environ et perd la phrase en cours.
+// On relance donc nous-mêmes après 4 minutes, juste après une fin de phrase.
+const SESSION_MAX_MS = 240000;
+let debutSession = 0;
+let erreursReseau = [];
+
+// Chrome récent accepte une piste audio : on écoute alors le micro choisi.
+// Les versions plus anciennes ignorent l'argument et prennent le micro par défaut.
+function lancerReco() {
+  debutSession = Date.now();
+  const piste = fluxAudio?.getAudioTracks()[0];
+  try {
+    if (piste && piste.readyState === "live") reco.start(piste); else reco.start();
+  } catch (e) {
+    if (e.name === "InvalidStateError") return; // déjà démarrée
+    try { reco.start(); } catch (e2) { /* déjà démarrée */ }
+  }
+}
 
 function creerReco() {
   const r = new SR();
@@ -232,8 +282,12 @@ function creerReco() {
     let provisoire = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const res = e.results[i];
-      if (res.isFinal) ajouterTexte(majuscule(res[0].transcript));
-      else provisoire += res[0].transcript;
+      if (!phrase) phrase = { orateur: etat.orateur, point: etat.pointIndex };
+      if (res.isFinal) {
+        ajouterTexte(majuscule(res[0].transcript), "parole", phrase.orateur, phrase.point);
+        phrase = null;
+        if (Date.now() - debutSession > SESSION_MAX_MS) { try { r.stop(); } catch (err) { /* onend relance */ } }
+      } else provisoire += res[0].transcript;
     }
     $("interim").textContent = provisoire;
   };
@@ -243,7 +297,12 @@ function creerReco() {
       alerte("Le micro est refusé. Autorisez-le dans la barre d'adresse de Chrome, puis relancez.");
       arreterEcoute();
     } else if (e.error === "network") {
-      alerte("Connexion internet perdue : la transcription reprendra seule. L'audio continue d'être enregistré.");
+      // une coupure isolée est la fin normale d'une session Google : on ne prévient que si elles se répètent
+      const t = Date.now();
+      erreursReseau = erreursReseau.filter((x) => t - x < 60000).concat(t);
+      if (navigator.onLine === false || erreursReseau.length >= 3) {
+        alerte("Connexion internet perdue : la transcription reprendra seule. L'audio continue d'être enregistré.");
+      }
     } else if (e.error === "audio-capture") {
       alerte("Aucun micro détecté. Branchez-en un puis relancez.");
       arreterEcoute();
@@ -254,7 +313,8 @@ function creerReco() {
   // Chrome coupe la reconnaissance régulièrement : on relance tant que l'écoute est voulue.
   r.onend = () => {
     $("interim").textContent = "";
-    if (ecoute) setTimeout(() => { if (ecoute) try { r.start(); } catch (e) { /* déjà relancée */ } }, 300);
+    phrase = null;
+    if (ecoute) setTimeout(() => { if (ecoute) lancerReco(); }, 300);
   };
   return r;
 }
@@ -268,9 +328,17 @@ async function demarrerEcoute() {
     alerte("Ce navigateur ne sait pas transcrire. Ouvrez l'outil dans Google Chrome ou Microsoft Edge.");
     return;
   }
+  try {
+    await ouvrirMicro();
+  } catch (e) {
+    alerte(e.name === "NotAllowedError"
+      ? "Le micro est refusé. Autorisez-le dans la barre d'adresse de Chrome, puis relancez."
+      : "Ce micro est introuvable. Choisissez-en un autre dans la liste.");
+    return;
+  }
   ecoute = true;
   reco = reco || creerReco();
-  try { reco.start(); } catch (e) { /* déjà démarrée */ }
+  lancerReco();
   debutChrono = Date.now();
   if (!lireHeure()) $("heure").value = new Date().toTimeString().slice(0, 5);
   try { verrouEcran = await navigator.wakeLock?.request("screen"); } catch (e) { /* facultatif */ }
@@ -287,6 +355,8 @@ function arreterEcoute() {
   verrouEcran?.release?.().catch(() => {});
   verrouEcran = null;
   arreterAudio();
+  // laisse à Chrome le temps de rendre la dernière phrase avant de couper le micro
+  setTimeout(() => { if (!ecoute) fermerMicro(); }, 1500);
   majEtat();
   sauver();
 }
@@ -297,6 +367,7 @@ function majEtat() {
   $("etat").dataset.etat = ecoute ? "ecoute" : (etat.segments.length ? "pause" : "arret");
   $("etatTexte").textContent = ecoute ? "Écoute en cours" : (etat.segments.length ? "En pause" : "À l'arrêt");
   $("garderAudio").disabled = ecoute;
+  $("micro").disabled = ecoute;
 }
 setInterval(() => { $("chrono").textContent = hhmmss(dureeActuelle()); }, 1000);
 document.addEventListener("visibilitychange", async () => {
@@ -333,9 +404,9 @@ async function viderMorceaux() {
   const db = await ouvrirBase();
   db.transaction("morceaux", "readwrite").objectStore("morceaux").clear();
 }
-async function demarrerAudio() {
+// L'audio de secours enregistre le même micro que la transcription.
+function demarrerAudio() {
   try {
-    fluxAudio = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true } });
     const type = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
     enregistreur = new MediaRecorder(fluxAudio, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
     enregistreur.ondataavailable = (e) => { if (e.data.size) stockerMorceau(e.data).then(majInfoAudio); };
@@ -346,9 +417,7 @@ async function demarrerAudio() {
 }
 function arreterAudio() {
   if (enregistreur && enregistreur.state !== "inactive") enregistreur.stop();
-  fluxAudio?.getTracks().forEach((t) => t.stop());
   enregistreur = null;
-  fluxAudio = null;
 }
 async function majInfoAudio() {
   try {
@@ -470,6 +539,10 @@ window.addEventListener("beforeunload", (e) => { if (ecoute) { e.preventDefault(
 
 const lien = $("lienRedaction");
 if (URL_REDACTION.startsWith("https://")) lien.href = URL_REDACTION; else lien.hidden = true;
+
+$("micro").addEventListener("change", () => { try { localStorage.setItem(CLE_MICRO, $("micro").value); } catch (e) { /* rien */ } });
+navigator.mediaDevices?.addEventListener?.("devicechange", listerMicros);
+listerMicros();
 
 charger();
 rendreTout();

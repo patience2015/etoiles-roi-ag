@@ -75,6 +75,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 
 .pupitre { background: var(--carte); border: 1px solid var(--trait); border-radius: 10px; padding: 14px 16px; display: grid; gap: 14px; position: sticky; top: 0; z-index: 2; }
 .commandes { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.micro { display: flex; flex-direction: row; align-items: center; gap: 6px; font-weight: 600; }
+.micro select { width: auto; max-width: 260px; }
 .case { display: flex; flex-direction: row; align-items: center; gap: 6px; font-weight: 400; }
 .case input { width: auto; }
 .point { display: flex; align-items: center; gap: 10px; background: var(--or-pale); border-radius: 8px; padding: 8px 10px; }

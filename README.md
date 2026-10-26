@@ -4,7 +4,7 @@ L'ordre du jour v2 est déjà chargé : les 10 points enregistrés, du mot de bi
 
 **Deux jours, une seule séance** : le samedi soir, cliquez sur « Mettre en pause ». Laissez l'ordinateur tel quel, ou fermez-le : tout est sauvegardé. Le dimanche, rouvrez `demarrer.cmd`, cliquez sur « Point suivant » jusqu'à « Organisation du voyage annuel », puis sur « Reprendre l'écoute ». N'exportez qu'à la fin du dimanche.
 
-En ligne : **https://patience2015.github.io/etoiles-roi-ag/** (dans Chrome ou Edge, sur n'importe quel ordinateur). Sans internet, utilisez demarrer.cmd sur ce PC.
+En ligne : **https://patience2015.github.io/etoiles-roi-ag/** (dans Chrome ou Edge, sur n'importe quel ordinateur). Si le site ne répond pas, demarrer.cmd lance la même chose sur ce PC (internet reste nécessaire pour la transcription).
 
 Deux outils :
 

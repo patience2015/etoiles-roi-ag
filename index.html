@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Greffier de séance — Les Étoiles Roi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bandeau">
+  <div class="bandeau-in">
+    <div>
+      <p class="sur">Association Les Étoiles Roi</p>
+      <h1>Greffier de séance</h1>
+    </div>
+    <div class="etat" id="etat" data-etat="arret">
+      <span class="voyant"></span><span id="etatTexte">À l'arrêt</span>
+      <span class="chrono" id="chrono">00:00:00</span>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <!-- Colonne gauche : préparation + votes -->
+  <aside class="col-gauche">
+    <details class="bloc" id="blocPrepa" open>
+      <summary>Préparation de la séance</summary>
+      <div class="champs">
+        <label>Type d'assemblée
+          <select id="typeAG">
+            <option>Assemblée générale annuelle</option>
+            <option>Assemblée générale ordinaire</option>
+            <option>Assemblée générale extraordinaire</option>
+            <option>Assemblée générale ordinaire et extraordinaire</option>
+          </select>
+        </label>
+        <div class="deux">
+          <label>Premier jour <input id="date" type="date" value="2026-11-07"></label>
+          <label>Dernier jour <input id="dateFin" type="date" value="2026-11-08"></label>
+        </div>
+        <label>Heure d'ouverture <input id="heure" type="time" value="15:00"></label>
+        <label>Lieu <input id="lieu" type="text" value="Montgeron"></label>
+        <div class="deux">
+          <label>Présidente de séance <input id="presidente" type="text" placeholder="Nom"></label>
+          <label>Secrétaire de séance <input id="secretaire" type="text" value="Erna"></label>
+        </div>
+        <div class="trois">
+          <label>Membres <input id="inscrits" type="number" min="0"></label>
+          <label>Présentes <input id="presents" type="number" min="0"></label>
+          <label>Représentées <input id="representes" type="number" min="0"></label>
+        </div>
+        <label>Ordre du jour <small>(un point par ligne)</small>
+          <textarea id="ordre" rows="10">Mot de bienvenue
+« À nous la parole » : un temps d'écoute
+Point sur la vie du groupe
+Les rencontres trimestrielles : faut-il faire évoluer le format ?
+Réflexion sur le format de l'Assemblée Générale
+Tirage au sort de la tontine 2027
+Bilan de l'année
+Divers
+Organisation du voyage annuel
+Projets potentiels pour le groupe</textarea>
+        </label>
+        <label>Rôles de la journée
+          <input id="roles" type="text" value="Censeur du jour : Sandra ; montage vidéo : Ginette ; buffet : Beali et Agnès ; boissons : Adriana et Géraldine">
+        </label>
+        <label>Intervenants habituels <small>(séparés par des virgules)</small>
+          <input id="orateurs" type="text" value="Présidente, Achy, Erna, Passy, Sandra, Sandrine, Saurelle, Ginette, Une membre">
+        </label>
+      </div>
+    </details>
+
+    <section class="bloc">
+      <h2>Enregistrer un vote</h2>
+      <p class="aide">Pour un résultat sans vote (ordre de passage de la tontine, décision prise d'un commun accord), utilisez plutôt « Noter » sous la transcription.</p>
+      <form id="formVote" class="champs">
+        <label>Résolution soumise au vote
+          <input id="voteTexte" type="text" placeholder="Ex. : approbation des comptes 2025-2026" required>
+        </label>
+        <div class="trois">
+          <label>Pour <input id="votePour" type="number" min="0" value="0"></label>
+          <label>Contre <input id="voteContre" type="number" min="0" value="0"></label>
+          <label>Abstentions <input id="voteAbst" type="number" min="0" value="0"></label>
+        </div>
+        <button type="submit" class="btn">Ajouter le vote</button>
+      </form>
+      <ol id="listeVotes" class="votes"></ol>
+    </section>
+
+    <section class="bloc">
+      <h2>Fin de séance</h2>
+      <div class="actions-col">
+        <button class="btn plein" id="btnExport">Exporter la séance (.json)</button>
+        <button class="btn" id="btnTxt">Transcription seule (.txt)</button>
+        <button class="btn" id="btnAudio">Télécharger l'enregistrement audio</button>
+        <button class="btn" id="btnCopier">Copier pour Claude</button>
+        <a class="btn lien" id="lienRedaction" href="#" target="_blank" rel="noopener">Ouvrir la page de rédaction ↗</a>
+        <button class="btn danger" id="btnEffacer">Nouvelle séance (tout effacer)</button>
+      </div>
+      <p class="aide" id="infoAudio"></p>
+    </section>
+  </aside>
+
+  <!-- Colonne droite : écoute -->
+  <section class="col-droite">
+    <div class="pupitre">
+      <div class="commandes">
+        <button class="btn ecoute" id="btnEcoute">Démarrer l'écoute</button>
+        <label class="case"><input type="checkbox" id="garderAudio" checked> Garder aussi l'audio</label>
+      </div>
+      <div class="point">
+        <button class="btn petit" id="btnPrec" aria-label="Point précédent">‹</button>
+        <div class="point-txt">
+          <span class="sur">Point en cours</span>
+          <strong id="pointCourant">—</strong>
+          <small id="pointInfo" class="point-info"></small>
+        </div>
+        <button class="btn petit" id="btnSuiv">Point suivant ›</button>
+      </div>
+      <div class="orateurs">
+        <span class="sur">Qui parle ?</span>
+        <div id="puces" class="puces"></div>
+        <input id="orateurLibre" type="text" placeholder="Autre nom puis Entrée">
+      </div>
+    </div>
+
+    <div class="flux" id="flux" aria-live="polite"></div>
+    <p class="interim" id="interim"></p>
+
+    <form id="formNote" class="note">
+      <input id="noteTexte" type="text" placeholder="Noter une décision, un résultat (ordre de la tontine…), un nom mal compris…">
+      <button class="btn" type="submit">Noter</button>
+    </form>
+    <p class="aide" id="compteur"></p>
+  </section>
+</main>
+
+<div class="alerte" id="alerte" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
